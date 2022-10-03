@@ -23,17 +23,25 @@ else()
   SET(PYTHON_VERSION 3 CACHE STRING "Python Version")
 endif()
 
-set(PYBIND11_PYTHON_VERSION ${PYTHON_VERSION} CACHE STRING "Python version used by PyBind11")
+find_package (Python${PYTHON_VERSION} COMPONENTS Interpreter Development REQUIRED)
 
-find_package(PythonInterp ${PYTHON_VERSION} REQUIRED)
-find_package(PythonLibs ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR} REQUIRED)
+set(PYBIND11_PYTHON_VERSION ${Python${PYTHON_VERSION}_VERSION_MAJOR}.${Python${PYTHON_VERSION}_VERSION_MAJOR} CACHE STRING "Python version used by PyBind11")
+
 # get_python_lib in python3 produces path which isn't in sys.path: https://bugs.launchpad.net/ubuntu/+source/python3-stdlib-extensions/+bug/1832215
 # execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(plat_specific=True, prefix=''))" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-set(PYTHON_SITE_PACKAGES_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/lib/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/dist-packages")  # This might be overridden below if built with catkin.
+# If no site packages dir given ask python via command
+execute_process(
+    COMMAND "${Python${PYTHON_VERSION}_EXECUTABLE}" -c "if True:
+        import site;
+        print(site.getsitepackages()[0])"
+        OUTPUT_VARIABLE PYTHON_SITE_PACKAGES_INSTALL_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
 set(LIBRARY_NAME "PyKDL")
 
 # catkin-specific configuration (optional)
 find_package(catkin QUIET)
+find_package(ament_cmake QUIET)
 if(catkin_FOUND)
   catkin_package(
     SKIP_CMAKE_CONFIG_GENERATION
@@ -41,15 +49,12 @@ if(catkin_FOUND)
   )
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CATKIN_DEVEL_PREFIX}/${PYTHON_INSTALL_DIR})
   set(PYTHON_SITE_PACKAGES_INSTALL_DIR "${PYTHON_INSTALL_DIR}")
+elseif( ament_cmake_FOUND )
+  ament_python_install_package(${LIBRARY_NAME})
+  set(PYTHON_SITE_PACKAGES_INSTALL_DIR "${PYTHON_INSTALL_DIR}/${LIBRARY_NAME}")
 endif()
 
 # Build the module
-if(WIN32)
-  set(PYTHON_MODULE_EXTENSION ".pyd")
-else()
-  set(PYTHON_MODULE_EXTENSION ".so")
-endif()
-
 find_package(pybind11 QUIET)
 if(NOT ${pybind11_FOUND})
   message(STATUS "pybind11 not found, building from source")
